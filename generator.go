@@ -34,13 +34,17 @@ type (
 	Z int
 )
 
+type S struct {
+	a int
+}
+
 // For tracking memory layout
 type Mem struct {
 	ptrs map[uintptr]string
 	vars map[string]string
 }
 
-func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports []string) error {
+func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports map[string]*ast.Package) error {
 	// All pointers that point to the same place in the previous env must point to the
 	// same place in the new env. We can't simply make a new value for each pointer as
 	// we can for other types. Even worse, the pointer may point somewhere inside a compiled
@@ -48,8 +52,8 @@ func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports []string) error {
 	mem := &Mem{make(map[uintptr]string), make(map[string]string)}
 
 	_, err := fmt.Fprint(w,
-	`root := &Eval.SimpleEnv{
-		Var: map[string]reflect.Value{},
+`	root := &eval.SimpleEnv{
+		Vars: map[string]reflect.Value{},
 		Consts: map[string]reflect.Value{},
 		Funcs: map[string]reflect.Value{},
 		Types: map[string]reflect.Type{},
@@ -58,13 +62,11 @@ func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports []string) error {
 	if err != nil {
 		return err
 	}
-	for _, i := range imports {
-		if pkg, err := Import(i); err != nil {
-			return err
-		} else if err := writeImport(w, pkg); err != nil {
+	for _, pkg := range imports {
+		if err := writeImport(w, pkg); err != nil {
 			return err
 		} else {
-			delete(env.Pkgs, i)
+			delete(env.Pkgs, pkg.Name)
 		}
 	}
 	for name, pkg := range env.Pkgs {
@@ -83,7 +85,7 @@ func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports []string) error {
 	for k, v := range env.Vars {
 		e := v.Elem()
 		if lit, err := sprintLiteral(e, mem); err != nil {
-			fmt.Fprintf(os.Stderr, "warning! %v\n", err)
+			fmt.Fprintf(os.Stderr, "warning! could not save var '%s': %v\n", k, err)
 		} else {
 			vars[k] = lit
 			i += 1
@@ -209,7 +211,7 @@ func sprintLiteral(v reflect.Value, mem *Mem) (string, error) {
 			n := t.Field(i).Name
 			if unicode.IsLower([]rune(n)[0]) {
 				return "", errors.New(
-					fmt.Sprintf("struct %v has private field '%v'\n", n))
+					fmt.Sprintf("struct %v has private field '%v'", t, n))
 			}
 		}
 		lit, err := sprintCompositeLit(v, mem, structFieldPrinter)

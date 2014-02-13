@@ -3,7 +3,9 @@ package gack
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 
 	"path"
 
@@ -14,7 +16,7 @@ import (
 
 func Import(pkgPath string) (*ast.Package, error) {
 	fset := token.NewFileSet()
-	if pkgs, err := parser.ParseDir(fset, pkgPath, nil, 0); err != nil {
+	if pkgs, err := parser.ParseDir(fset, pkgPath, testFilter, 0); err != nil {
 		return nil, err
 	} else if len(pkgs) == 0 {
 		return nil, errors.New(fmt.Sprintf("no buildable Go source files in %s", pkgPath))
@@ -49,4 +51,8 @@ func Import(pkgPath string) (*ast.Package, error) {
 		// Keep the compiler happy
 		panic("impossible")
 	}
+}
+
+func testFilter(fi os.FileInfo) bool {
+	return !strings.HasSuffix(fi.Name(), "_test.go")
 }
