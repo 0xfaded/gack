@@ -2,21 +2,27 @@ package gack
 
 import (
 	"errors"
-	"fmt"
-	"path"
-	"strings"
-
-	"io/ioutil"
-	"os"
 
 	"go/ast"
 	"go/build"
+
+	"fmt"
+	"path"
+	"strings"
+	"syscall"
+
+	"io/ioutil"
+
+	"os"
+	"os/exec"
+
 	"github.com/0xfaded/eval"
 )
 
-func Quine(env *eval.SimpleEnv, imports []string) error {
+func Quine(env *eval.SimpleEnv, imports, history []string) error {
 	required := []string{
 		"reflect",
+		"os",
 		"github.com/0xfaded/eval",
 		"github.com/0xfaded/gack",
 	}
@@ -25,24 +31,40 @@ func Quine(env *eval.SimpleEnv, imports []string) error {
 	if err != nil {
 		return err
 	}
-	//defer os.Remove(f.Name())
+	srcDeleted := false
+	_ = srcDeleted
+	// if the exec is successful this will never be run
+	defer (func() {
+		if !srcDeleted {
+			f.Close()
+			os.Remove(f.Name())
+		}
+	})()
 
 	if _, err = fmt.Fprint(f, "package main\nimport (\n"); err != nil {
 		return err
 	}
 
 	imported := map[string]bool{}
+	names := map[string]string{}
 	pkgs := make(map[string]*ast.Package, len(imports))
 	for _, i := range(imports) {
 		if absolute, clean, err := findImport(i); err != nil {
 			return err
 		} else if pkg, err := Import(absolute); err != nil {
 			return err
+		} else if at, ok := names[pkg.Name]; ok {
+			return errors.New(fmt.Sprintf("%v redeclared as imported package name\n" +
+				"\tprevious declaration at %v", pkg.Name, at))
 		} else if _, err := fmt.Fprintf(f, "\t\"%s\"\n", clean); err != nil {
 			return err
 		} else {
 			imported[clean] = true
 			pkgs[clean] = pkg
+			for f := range pkg.Files {
+				names[pkg.Name] = f
+				break
+			}
 		}
 	}
 	for _, r := range required {
@@ -61,41 +83,77 @@ func Quine(env *eval.SimpleEnv, imports []string) error {
 		return err
 	}
 
-	if _, err := fmt.Fprint(f, "\tRepl(root)\n}"); err != nil {
+
+	if _, err := fmt.Fprint(f, "\thistory := []string{}\n"); err != nil {
 		return err
 	}
 
+	// Replay the previous session
+	for _, h := range history {
+		if _, err := fmt.Fprintf(f, "\teval.EvalEnv(%s, root)\n\thistory = append(history, %s)", h, h); err != nil {
+			return err
+		}
+	}
 
-	/*
-	// -e prints all errors
-	cmd := exec.Command(build.ToolDir + "/8g", "-e", "-o", "/dev/null", f.Name())
-	stdout, err := cmd.StdoutPipe()
+	// Delete the previous binary
+	if _, err := fmt.Fprintf(f, "\tos.Remove(\"%v\")\n", os.Args[0]); err != nil {
+		return err
+	}
+
+	// Enter the repl
+	if _, err := fmt.Fprint(f, "\tgack.Repl(root, history)\n}"); err != nil {
+		return err
+	}
+
+	// Compile the new program
+	o, err := ioutil.TempFile("/tmp", "gack")
 	if err != nil {
 		return err
 	}
-	if err := cmd.Start(); err != nil {
+	o.Close()
+
+	srcDeleted = true
+	f.Close()
+
+	compiler := path.Join(build.ToolDir, "8g")
+	linker := path.Join(build.ToolDir, "8l")
+	if strings.HasPrefix(build.Default.GOARCH, "amd64") {
+		compiler = path.Join(build.ToolDir, "6g")
+		linker = path.Join(build.ToolDir, "6l")
+	}
+
+	platform := build.Default.GOOS + "_" + build.Default.GOARCH
+	gopathlibs := path.Join(os.Getenv("GOPATH"), "pkg", platform)
+	gorootlibs := path.Join(os.Getenv("GOROOT"), "pkg", platform)
+	cmd := exec.Command(compiler, "-o", o.Name(), "-I", gopathlibs, "-I", gorootlibs, f.Name())
+	if output, err := cmd.Output(); err != nil {
+		fmt.Fprintf(os.Stdout, "Generated src failed to compile. Please file a bug report " +
+			"with %s attached\n", f.Name())
+		os.Stdout.Write(output)
 		return err
 	}
-	buf := bufio.NewReader(stdout)
 
-	line, rerr := buf.ReadString('\n')
-	for rerr == nil {
-		if strings.Index(line, ": ") != -1 {
-			// Remove filename prefix
-			s := strings.SplitN(line, ": ", 2)[1]
-			// Remove trailing \n
-			s = s[:len(s)-1]
-			compileErrors = append(compileErrors, s)
-		}
-		line, rerr = buf.ReadString('\n')
+	// Delete the generated source
+	os.Remove(f.Name())
+
+	e, err := ioutil.TempFile("/tmp", "gack")
+	if err != nil {
+		return err
 	}
-	if rerr != io.EOF {
-		return nil, rerr
-	} else {
-		return compileErrors, nil
+	e.Close()
+	cmd = exec.Command(linker, "-o", e.Name(), "-L", gopathlibs, "-L", gorootlibs, o.Name())
+	if output, err := cmd.Output(); err != nil {
+		fmt.Fprintf(os.Stdout, "Generated src failed to compile. Please file a bug report " +
+			"with %s attached\n", f.Name())
+		os.Stdout.Write(output)
+		return err
 	}
-	*/
-	return nil
+
+	// Delete the object file
+	os.Remove(o.Name())
+
+	// Go for the kill :)
+	return syscall.Exec(e.Name(), []string{o.Name()}, os.Environ())
 }
 
 func findImport(pkgPath string) (absolutePath, cleanedPkgPath string, err error) {
@@ -120,13 +178,11 @@ func findImport(pkgPath string) (absolutePath, cleanedPkgPath string, err error)
 		}
 	}
 	clean := strings.Join(parts, "/")
-	gopath := path.Join(build.Default.GOPATH, "src", clean)
-	fmt.Printf("%v\n", gopath)
+	gopath := path.Join(os.Getenv("GOPATH"), "src", clean)
 	if fi, _ := os.Stat(gopath); fi != nil && fi.IsDir() {
 		return gopath, clean, nil
 	}
-	goroot := path.Join(build.Default.GOROOT, "src", clean)
-	fmt.Printf("%v\n", goroot)
+	goroot := path.Join(os.Getenv("GOROOT"), "src", "pkg", clean)
 	if fi, _ := os.Stat(goroot); fi != nil && fi.IsDir() {
 		return goroot, clean, nil
 	}
