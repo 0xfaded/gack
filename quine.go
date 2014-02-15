@@ -20,11 +20,15 @@ import (
 )
 
 func Quine(env *eval.SimpleEnv, imports, history []string) error {
-	required := []string{
-		"reflect",
-		"os",
-		"github.com/0xfaded/eval",
-		"github.com/0xfaded/gack",
+	required := map[string]bool{
+		"reflect" : true,
+		"os" : true,
+		"github.com/0xfaded/eval" : true,
+		"github.com/0xfaded/gack" : true,
+	}
+
+	for _, i := range env.Pkgs {
+		required[i.(*eval.SimpleEnv).Path] = true
 	}
 
 	f, err := ioutil.TempFile("/tmp", "gack")
@@ -67,7 +71,7 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 			}
 		}
 	}
-	for _, r := range required {
+	for  r := range required {
 		if !imported[r] {
 			if _, err := fmt.Fprintf(f, "\t\"%s\"\n", r); err != nil {
 				return err
@@ -95,9 +99,16 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 		}
 	}
 
-	// Delete the previous binary
-	if _, err := fmt.Fprintf(f, "\tos.Remove(\"%v\")\n", os.Args[0]); err != nil {
-		return err
+	// Delete the previous binary. history == nil implies this is the first invokation,
+	// we ought not to delete that one ;p
+	if history != nil {
+		if _, err := fmt.Fprintf(f, "\tos.Remove(\"%v\")\n", os.Args[0]); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprint(f, "\t_ = os.Remove\n"); err != nil {
+			return err
+		}
 	}
 
 	// Enter the repl
@@ -153,7 +164,13 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 	os.Remove(o.Name())
 
 	// Go for the kill :)
-	return syscall.Exec(e.Name(), []string{o.Name()}, os.Environ())
+	return syscall.Exec(e.Name(), []string{e.Name()}, os.Environ())
+}
+
+func deleteSelf() {
+	if rm, err := exec.LookPath("rm"); err == nil {
+		syscall.Exec(rm, []string{rm, os.Args[0]}, os.Environ())
+	}
 }
 
 func findImport(pkgPath string) (absolutePath, cleanedPkgPath string, err error) {
@@ -190,3 +207,4 @@ func findImport(pkgPath string) (absolutePath, cleanedPkgPath string, err error)
 	%s (from $GOROOT)
 	%s (from $GOPATH)`, clean, goroot, gopath))
 }
+

@@ -43,8 +43,33 @@ To quit, enter: "quit" or Ctrl-D (EOF).
 }
 
 func Repl(env *eval.SimpleEnv, history []string) {
-	if history != nil {
+	if history == nil {
 		introText()
+	}
+
+	// As a party piece. add the package contents as a map to the env. We can get away with this
+	// because eval checks for packages before vars for EACH scope. Therefore, if a local variable
+	// masks a pkg, it will still be found first. In other words, I'm cheating here, it's a hack.
+	for name, pkg := range env.Pkgs {
+		e := pkg.(*eval.SimpleEnv)
+		// Don't overwrite existing vars
+		if _, ok := e.Vars[name]; ok {
+			continue
+		}
+		m := map[string]reflect.Type{}
+		for n, v := range e.Vars {
+			m[n] = v.Type()
+		}
+		for n, c := range e.Consts {
+			m[n] = c.Type()
+		}
+		for n, f := range e.Funcs {
+			m[n] = f.Type()
+		}
+		for n, t := range e.Types {
+			m[n] = t
+		}
+		env.Vars[name] = reflect.ValueOf(&m)
 	}
 
 	var err error
@@ -62,6 +87,7 @@ func Repl(env *eval.SimpleEnv, history []string) {
 			if err != io.EOF {
 				fmt.Printf("gack error: %v", err)
 			}
+			fmt.Printf("\n")
 			break
 		}
 		if err := handleImport(env, line, history); err != nil {
@@ -111,6 +137,9 @@ func Repl(env *eval.SimpleEnv, history []string) {
 
 		line, err = readline("go> ", in)
 	}
+	if history != nil {
+		deleteSelf()
+	}
 }
 
 // This will only return a nil error if the line isn't an import statement.
@@ -122,13 +151,19 @@ func handleImport(env *eval.SimpleEnv, line string, history []string) error {
 	if len(parts) == 0 || parts[0] != "import" {
 		return nil
 	}
+	inScope := map[string]bool{}
+	for _, p := range env.Pkgs {
+		inScope[p.(*eval.SimpleEnv).Path] = true
+	}
 	imports := []string{}
 	for _, part := range parts[1:] {
 		if part == "" {
 			continue
 		}
 		if i, err := strconv.Unquote(part); err != nil {
-			return errors.New("Invalid import `"+part+"'")
+			return errors.New("invalid import `"+part+"'")
+		} else if inScope[i] {
+			return errors.New("import `"+part+"' already in scope")
 		} else {
 			imports = append(imports, i)
 		}

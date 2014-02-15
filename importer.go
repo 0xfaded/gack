@@ -10,13 +10,23 @@ import (
 	"path"
 
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 )
 
 func Import(pkgPath string) (*ast.Package, error) {
+	filter := func(fi os.FileInfo) bool {
+		if strings.HasSuffix(fi.Name(), "_test.go") {
+			return false
+		} else if match, err := build.Default.MatchFile(pkgPath, fi.Name()); !match || err != nil {
+			return false
+		}
+		return true
+	}
+
 	fset := token.NewFileSet()
-	if pkgs, err := parser.ParseDir(fset, pkgPath, testFilter, 0); err != nil {
+	if pkgs, err := parser.ParseDir(fset, pkgPath, filter, 0); err != nil {
 		return nil, err
 	} else if len(pkgs) == 0 {
 		return nil, errors.New(fmt.Sprintf("no buildable Go source files in %s", pkgPath))
@@ -53,6 +63,3 @@ func Import(pkgPath string) (*ast.Package, error) {
 	}
 }
 
-func testFilter(fi os.FileInfo) bool {
-	return !strings.HasSuffix(fi.Name(), "_test.go")
-}

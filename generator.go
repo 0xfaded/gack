@@ -28,11 +28,9 @@ func WriteEnv(w io.Writer, env *eval.SimpleEnv, imports map[string]*ast.Package)
 	if err != nil {
 		return err
 	}
-	for _, pkg := range imports {
-		if err := writeImport(w, pkg); err != nil {
+	for pkgPath, pkg := range imports {
+		if err := writeImport(w, pkg, pkgPath); err != nil {
 			return err
-		} else {
-			delete(env.Pkgs, pkg.Name)
 		}
 	}
 	for name, pkg := range env.Pkgs {
@@ -50,39 +48,52 @@ func writePkg(w io.Writer, pkg *eval.SimpleEnv, pkgName string) error {
 	if _, err := fmt.Fprintf(w, "\t\t\t\"%s\": &eval.SimpleEnv{\n", pkgName); err != nil {
 		return err
 	}
-	fmt.Fprint(w, "\t\t\t\tVars: map[string]reflect.Value{\n")
+	if _, err := fmt.Fprintf(w, "\t\t\t\tPath: \"%s\",\n", pkg.Path); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprint(w, "\t\t\t\tVars: map[string]reflect.Value{\n"); err != nil {
+		return err
+	}
 	for k := range pkg.Vars {
 		_, err := fmt.Fprintf(w, "\t\t\t\t\t\"%s\": reflect.ValueOf(&%s.%s),\n", k, pkgName, k)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tConsts: map[string]reflect.Value{\n")
+	if _, err := fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tConsts: map[string]reflect.Value{\n"); err != nil {
+		return err
+	}
 	for k := range pkg.Consts {
 		_, err := fmt.Fprintf(w, "\t\t\t\t\t\"%s\": reflect.ValueOf(%s.%s),\n", k, pkgName, k)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tFuncs: map[string]reflect.Value{\n")
+	if _, err := fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tFuncs: map[string]reflect.Value{\n"); err != nil {
+		return err
+	}
 	for k := range pkg.Funcs {
 		_, err := fmt.Fprintf(w, "\t\t\t\t\t\"%s\": reflect.ValueOf(%s.%s),\n", k, pkgName, k)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tTypes: map[string]reflect.Type{\n")
+	if _, err := fmt.Fprint(w, "\t\t\t\t},\n\t\t\t\tTypes: map[string]reflect.Type{\n"); err != nil {
+		return err
+	}
 	for k := range pkg.Types {
 		_, err := fmt.Fprintf(w, "\t\t\t\t\t\"%s\": reflect.TypeOf(new(%s.%s)).Elem(),\n", k, pkgName, k)
 		if err != nil {
 			return err
 		}
 	}
-	fmt.Fprint(w, "\t\t\t\t},\n\t\t\t},\n")
+	if _, err := fmt.Fprint(w, "\t\t\t\t},\n\t\t\t},\n"); err != nil {
+		return err
+	}
 	return nil
 }
 
-func writeImport(w io.Writer, pkg *ast.Package) error {
+func writeImport(w io.Writer, pkg *ast.Package, pkgPath string) error {
 	var files []*ast.File
 	for _, f := range pkg.Files {
 		if ast.FileExports(f) {
@@ -90,6 +101,7 @@ func writeImport(w io.Writer, pkg *ast.Package) error {
 		}
 	}
 	env := eval.MakeSimpleEnv()
+	env.Path = pkgPath
 	for _, f := range files {
 		for _, d := range f.Decls {
 			if gen, ok := d.(*ast.GenDecl); ok {
