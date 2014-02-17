@@ -145,7 +145,7 @@ func Repl(env *eval.SimpleEnv, history []string) {
 			}
 		}
 	}
-	if history != nil {
+	if deleteMe {
 		deleteSelf()
 	}
 }
