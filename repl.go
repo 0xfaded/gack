@@ -71,12 +71,6 @@ func Repl(env *eval.SimpleEnv, history []string) {
 	}
 	readline.SetAttemptedCompletionFunction(complete)
 
-	// A place to store result values of expressions entered
-	// interactively
-	results := make([]interface{}, 0, 10)
-	env.Vars["results"] = reflect.ValueOf(&results)
-
-	exprs := 0
 	prompt := "go> "
 	line := ""
 	for line != "quit" {
@@ -119,22 +113,24 @@ func Repl(env *eval.SimpleEnv, history []string) {
 						} else {
 							fmt.Printf("Kind = Type = %v\n", kind)
 						}
-						fmt.Printf("results[%d] = %s\n", exprs, eval.Inspect(value))
-						exprs += 1
-						results = append(results, (vals)[0].Interface())
+						fmt.Printf("it = %s\n", eval.Inspect(value))
+						it := reflect.New(vals[0].Type())
+						it.Elem().Set(vals[0])
+						env.Vars["it"] = it
 					} else {
 						fmt.Printf("%s\n", value)
 					}
-				} else {
+				} else if len(vals) > 2 {
 					fmt.Printf("Kind = Multi-Value\n")
 					size := len(vals)
+					it := make([]interface{}, len(vals))
 					for i, v := range vals {
 						fmt.Printf("%s", eval.Inspect(v))
 						if i < size-1 { fmt.Printf(", ") }
+						it[i] = vals[i].Interface()
 					}
 					fmt.Printf("\n")
-					exprs += 1
-					results = append(results, vals)
+					env.Vars["it"] = reflect.ValueOf(&it)
 				}
 			}
 		} else {
