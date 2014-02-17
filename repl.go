@@ -1,30 +1,18 @@
 package gack
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 
 	"go/ast"
 
-	"io"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/0xfaded/eval"
+	"github.com/gobs/readline"
 )
-
-// Simple replacement for GNU readline
-func readline(prompt string, in *bufio.Reader) (string, error) {
-	fmt.Printf(prompt)
-	line, err := in.ReadString('\n')
-	if err == nil {
-		line = strings.TrimRight(line, "\r\n")
-	}
-	return line, err
-}
 
 func introText() {
 	fmt.Printf(`=== A hacky Go eval REPL ===
@@ -47,6 +35,10 @@ To quit, enter: "quit" or Ctrl-D (EOF).
 func Repl(env *eval.SimpleEnv, history []string) {
 	if history == nil {
 		introText()
+	} else {
+		for _, h := range history {
+			readline.AddHistory(h)
+		}
 	}
 
 	// As a party piece. add the package contents as a map to the env. We can get away with this
@@ -74,7 +66,10 @@ func Repl(env *eval.SimpleEnv, history []string) {
 		env.Vars[name] = reflect.ValueOf(&m)
 	}
 
-	var err error
+	complete := func(test string, start, end int) []string {
+		return []string{""}
+	}
+	readline.SetAttemptedCompletionFunction(complete)
 
 	// A place to store result values of expressions entered
 	// interactively
@@ -82,17 +77,17 @@ func Repl(env *eval.SimpleEnv, history []string) {
 	env.Vars["results"] = reflect.ValueOf(&results)
 
 	exprs := 0
-	in := bufio.NewReader(os.Stdin)
-	line, err := readline("go> ", in)
+	prompt := "go> "
+	line := ""
 	for line != "quit" {
-		if err != nil {
-			if err != io.EOF {
-				fmt.Printf("gack error: %v", err)
-			}
+		result := readline.ReadLine(&prompt)
+		if result == nil {
 			fmt.Printf("\n")
 			break
 		}
+		line := *result
 		history = append(history, line)
+		readline.AddHistory(line)
 		if err := handleImport(env, line, history); err != nil {
 			fmt.Println(err)
 		// TODO[crc] move into generalised error position formatting code when written
@@ -151,7 +146,6 @@ func Repl(env *eval.SimpleEnv, history []string) {
 				fmt.Printf("panic: %s\n", err)
 			}
 		}
-		line, err = readline("go> ", in)
 	}
 	if history != nil {
 		deleteSelf()
