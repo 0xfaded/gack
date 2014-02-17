@@ -1,7 +1,6 @@
 package gack
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -29,7 +28,7 @@ func Import(pkgPath string) (*ast.Package, error) {
 	if pkgs, err := parser.ParseDir(fset, pkgPath, filter, 0); err != nil {
 		return nil, err
 	} else if len(pkgs) == 0 {
-		return nil, errors.New(fmt.Sprintf("no buildable Go source files in %s", pkgPath))
+		return nil, fmt.Errorf("no buildable Go source files in %s", pkgPath)
 	} else if len(pkgs) != 1 {
 		// The actual error message produced by gc lists the packages in the order
 		// they were found, usually alphabetically by file name. This is cumbersome to
@@ -52,8 +51,8 @@ func Import(pkgPath string) (*ast.Package, error) {
 			}
 			sort.Strings(namess[j])
 		}
-		return nil, errors.New(fmt.Sprintf("found pacakages %s (%s) and %s (%s) in %s",
-			keys[0], namess[0][0], keys[1], namess[1][0], pkgPath))
+		return nil, fmt.Errorf("found pacakages %s (%s) and %s (%s) in %s",
+			keys[0], namess[0][0], keys[1], namess[1][0], pkgPath)
 	} else {
 		for _, pkg := range pkgs {
 			return pkg, nil

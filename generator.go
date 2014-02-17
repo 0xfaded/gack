@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 
 	"go/ast"
 	"go/token"
@@ -48,7 +49,7 @@ func writePkg(w io.Writer, pkg *eval.SimpleEnv, pkgName string) error {
 	if _, err := fmt.Fprintf(w, "\t\t\t\"%s\": &eval.SimpleEnv{\n", pkgName); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "\t\t\t\tPath: \"%s\",\n", pkg.Path); err != nil {
+	if _, err := fmt.Fprintf(w, "\t\t\t\tPath: %s,\n", strconv.Quote(pkg.Path)); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprint(w, "\t\t\t\tVars: map[string]reflect.Value{\n"); err != nil {

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"go/parser"
+
+	"go/ast"
+
 	"io"
 	"os"
 	"reflect"
@@ -90,51 +92,65 @@ func Repl(env *eval.SimpleEnv, history []string) {
 			fmt.Printf("\n")
 			break
 		}
+		history = append(history, line)
 		if err := handleImport(env, line, history); err != nil {
 			fmt.Println(err)
-		} else if expr, err := parser.ParseExpr(line); err != nil {
+		// TODO[crc] move into generalised error position formatting code when written
+		} else if stmt, err := eval.ParseStmt(line); err != nil {
 			if pair := eval.FormatErrorPos(line, err.Error()); len(pair) == 2 {
 				fmt.Println(pair[0])
 				fmt.Println(pair[1])
 			}
-			fmt.Printf("parse error: %s\n", err)
-		} else if cexpr, errs := eval.CheckExpr(expr, env); len(errs) != 0 {
-			for _, cerr := range errs {
-				fmt.Printf("check error: %v\n", cerr)
-			}
-		} else if vals, err := eval.EvalExpr(cexpr, env); err != nil {
-			fmt.Printf("panic: %s\n", err)
-		} else if len(vals) == 0 {
-			fmt.Printf("Kind=Slice\nvoid\n")
-		} else if len(vals) == 1 {
-			value := (vals)[0]
-			if value.IsValid() {
-				kind := value.Kind().String()
-				typ  := value.Type().String()
-				if typ != kind {
-					fmt.Printf("Kind = %v\n", kind)
-					fmt.Printf("Type = %v\n", typ)
-				} else {
-					fmt.Printf("Kind = Type = %v\n", kind)
+			fmt.Printf("%s\n", err)
+		} else if expr, ok := stmt.(*ast.ExprStmt); ok {
+			if cexpr, errs := eval.CheckExpr(expr.X, env); errs != nil {
+				for _, cerr := range errs {
+					fmt.Printf("%v\n", cerr)
 				}
-				fmt.Printf("results[%d] = %s\n", exprs, eval.Inspect(value))
-				exprs += 1
-				results = append(results, (vals)[0].Interface())
+			} else if vals, err := eval.EvalExpr(cexpr, env); err != nil {
+				fmt.Printf("panic: %s\n", err)
+			} else if len(vals) == 0 {
+				fmt.Printf("Kind=Slice\nvoid\n")
 			} else {
-				fmt.Printf("%s\n", value)
+				// Success
+				if len(vals) == 1 {
+					value := (vals)[0]
+					if value.IsValid() {
+						kind := value.Kind().String()
+						typ  := value.Type().String()
+						if typ != kind {
+							fmt.Printf("Kind = %v\n", kind)
+							fmt.Printf("Type = %v\n", typ)
+						} else {
+							fmt.Printf("Kind = Type = %v\n", kind)
+						}
+						fmt.Printf("results[%d] = %s\n", exprs, eval.Inspect(value))
+						exprs += 1
+						results = append(results, (vals)[0].Interface())
+					} else {
+						fmt.Printf("%s\n", value)
+					}
+				} else {
+					fmt.Printf("Kind = Multi-Value\n")
+					size := len(vals)
+					for i, v := range vals {
+						fmt.Printf("%s", eval.Inspect(v))
+						if i < size-1 { fmt.Printf(", ") }
+					}
+					fmt.Printf("\n")
+					exprs += 1
+					results = append(results, vals)
+				}
 			}
 		} else {
-			fmt.Printf("Kind = Multi-Value\n")
-			size := len(vals)
-			for i, v := range vals {
-				fmt.Printf("%s", eval.Inspect(v))
-				if i < size-1 { fmt.Printf(", ") }
+			if cstmt, errs := eval.CheckStmt(stmt, env); len(errs) != 0 {
+				for _, cerr := range errs {
+					fmt.Printf("%v\n", cerr)
+				}
+			} else if err = eval.InterpStmt(cstmt, env); err != nil {
+				fmt.Printf("panic: %s\n", err)
 			}
-			fmt.Printf("\n")
-			exprs += 1
-			results = append(results, vals)
 		}
-
 		line, err = readline("go> ", in)
 	}
 	if history != nil {

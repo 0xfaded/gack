@@ -8,6 +8,7 @@ import (
 
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -58,9 +59,9 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 		} else if pkg, err := Import(absolute); err != nil {
 			return err
 		} else if at, ok := names[pkg.Name]; ok {
-			return errors.New(fmt.Sprintf("%v redeclared as imported package name\n" +
-				"\tprevious declaration at %v", pkg.Name, at))
-		} else if _, err := fmt.Fprintf(f, "\t\"%s\"\n", clean); err != nil {
+			return fmt.Errorf("%v redeclared as imported package name\n" +
+				"\tprevious declaration at %v", pkg.Name, at)
+		} else if _, err := fmt.Fprintf(f, "\t%s\n", strconv.Quote(clean)); err != nil {
 			return err
 		} else {
 			imported[clean] = true
@@ -73,7 +74,7 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 	}
 	for  r := range required {
 		if !imported[r] {
-			if _, err := fmt.Fprintf(f, "\t\"%s\"\n", r); err != nil {
+			if _, err := fmt.Fprintf(f, "\t%s\n", strconv.Quote(r)); err != nil {
 				return err
 			}
 		}
@@ -94,7 +95,8 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 
 	// Replay the previous session
 	for _, h := range history {
-		if _, err := fmt.Fprintf(f, "\teval.EvalEnv(%s, root)\n\thistory = append(history, %s)", h, h); err != nil {
+		h := strconv.Quote(h)
+		if _, err := fmt.Fprintf(f, "\teval.Interpret(%s, root)\n\thistory = append(history, %s)\n", h, h); err != nil {
 			return err
 		}
 	}
@@ -102,7 +104,7 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 	// Delete the previous binary. history == nil implies this is the first invokation,
 	// we ought not to delete that one ;p
 	if history != nil {
-		if _, err := fmt.Fprintf(f, "\tos.Remove(\"%v\")\n", os.Args[0]); err != nil {
+		if _, err := fmt.Fprintf(f, "\tos.Remove(%s)\n", strconv.Quote(os.Args[0])); err != nil {
 			return err
 		}
 	} else {
@@ -203,8 +205,8 @@ func findImport(pkgPath string) (absolutePath, cleanedPkgPath string, err error)
 	if fi, _ := os.Stat(goroot); fi != nil && fi.IsDir() {
 		return goroot, clean, nil
 	}
-	return "", "", errors.New(fmt.Sprintf(`cannot find package "%s" in any of:
+	return "", "", fmt.Errorf(`cannot find package "%s" in any of:
 	%s (from $GOROOT)
-	%s (from $GOPATH)`, clean, goroot, gopath))
+	%s (from $GOPATH)`, clean, goroot, gopath)
 }
 
