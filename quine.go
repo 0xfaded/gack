@@ -1,4 +1,4 @@
-package gack
+package gacklib
 
 import (
 	"errors"
@@ -20,12 +20,14 @@ import (
 	"github.com/0xfaded/eval"
 )
 
-func Quine(env *eval.SimpleEnv, imports, history []string) error {
+func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error {
 	required := map[string]bool{
 		"reflect" : true,
-		"os" : true,
 		"github.com/0xfaded/eval" : true,
-		"github.com/0xfaded/gack" : true,
+		"github.com/0xfaded/gacklib" : true,
+	}
+	if deleteMe {
+		required["os"] = true
 	}
 
 	for _, i := range env.Pkgs {
@@ -103,18 +105,14 @@ func Quine(env *eval.SimpleEnv, imports, history []string) error {
 
 	// Delete the previous binary. history == nil implies this is the first invokation,
 	// we ought not to delete that one ;p
-	if history != nil {
+	if deleteMe {
 		if _, err := fmt.Fprintf(f, "\tos.Remove(%s)\n", strconv.Quote(os.Args[0])); err != nil {
-			return err
-		}
-	} else {
-		if _, err := fmt.Fprint(f, "\t_ = os.Remove\n"); err != nil {
 			return err
 		}
 	}
 
 	// Enter the repl
-	if _, err := fmt.Fprint(f, "\tgack.Repl(root, history)\n}"); err != nil {
+	if _, err := fmt.Fprint(f, "\tgacklib.Repl(root, history)\n}"); err != nil {
 		return err
 	}
 

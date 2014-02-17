@@ -1,4 +1,4 @@
-package gack
+package gacklib
 
 import (
 	"fmt"

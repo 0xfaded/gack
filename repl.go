@@ -1,4 +1,4 @@
-package gack
+package gacklib
 
 import (
 	"errors"
@@ -33,8 +33,10 @@ To quit, enter: "quit" or Ctrl-D (EOF).
 }
 
 func Repl(env *eval.SimpleEnv, history []string) {
+	deleteMe := true
 	if history == nil {
 		introText()
+		deleteMe = false
 	} else {
 		for _, h := range history {
 			readline.AddHistory(h)
@@ -82,7 +84,7 @@ func Repl(env *eval.SimpleEnv, history []string) {
 		line := *result
 		history = append(history, line)
 		readline.AddHistory(line)
-		if err := handleImport(env, line, history); err != nil {
+		if err := handleImport(env, line, history, deleteMe); err != nil {
 			fmt.Println(err)
 		// TODO[crc] move into generalised error position formatting code when written
 		} else if stmt, err := eval.ParseStmt(line); err != nil {
@@ -151,7 +153,7 @@ func Repl(env *eval.SimpleEnv, history []string) {
 // This will only return a nil error if the line isn't an import statement.
 // If successful, a the process will exec a new interpreter with the imports
 // in scope.
-func handleImport(env *eval.SimpleEnv, line string, history []string) error {
+func handleImport(env *eval.SimpleEnv, line string, history []string, deleteMe bool) error {
 	line = strings.Trim(line, " \n\t")
 	parts := strings.Split(line, " ")
 	if len(parts) == 0 || parts[0] != "import" {
@@ -174,6 +176,6 @@ func handleImport(env *eval.SimpleEnv, line string, history []string) error {
 			imports = append(imports, i)
 		}
 	}
-	return Quine(env, imports, history)
+	return Quine(env, imports, history, deleteMe)
 }
 
