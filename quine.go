@@ -98,7 +98,10 @@ func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error 
 	// Replay the previous session
 	for _, h := range history {
 		h := strconv.Quote(h)
+		/* BUGGY
 		if _, err := fmt.Fprintf(f, "\teval.Interpret(%s, root)\n\thistory = append(history, %s)\n", h, h); err != nil {
+		*/
+		if _, err := fmt.Fprintf(f, "\thistory = append(history, %s)\n", h, h); err != nil {
 			return err
 		}
 	}
@@ -114,6 +117,14 @@ func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error 
 	// Enter the repl
 	if _, err := fmt.Fprint(f, "\tgacklib.Repl(root, history)\n}"); err != nil {
 		return err
+	}
+
+	// Note, this is the deleteMe that gets called if Repl returns. Most likely, the
+	// user will import and this code will never be reached.
+	if deleteMe {
+		if _, err := fmt.Fprintf(f, "\tgacklib.DeleteSelf()\n"); err != nil {
+			return err
+		}
 	}
 
 	// Compile the new program
@@ -167,7 +178,7 @@ func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error 
 	return syscall.Exec(e.Name(), []string{e.Name()}, os.Environ())
 }
 
-func deleteSelf() {
+func DeleteSelf() {
 	if rm, err := exec.LookPath("rm"); err == nil {
 		syscall.Exec(rm, []string{rm, os.Args[0]}, os.Environ())
 	}

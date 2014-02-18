@@ -145,9 +145,6 @@ func Repl(env *eval.SimpleEnv, history []string) {
 			}
 		}
 	}
-	if deleteMe {
-		deleteSelf()
-	}
 }
 
 // This will only return a nil error if the line isn't an import statement.
