@@ -54,7 +54,7 @@ func Repl(env *eval.SimpleEnv, history []string) {
 		}
 		m := map[string]reflect.Type{}
 		for n, v := range e.Vars {
-			m[n] = v.Type()
+			m[n] = v.Elem().Type()
 		}
 		for n, c := range e.Consts {
 			m[n] = c.Type()
