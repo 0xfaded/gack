@@ -122,8 +122,8 @@ func Repl(env *eval.SimpleEnv, history []string) {
 					} else {
 						fmt.Printf("%s\n", value)
 					}
-				} else if len(vals) > 2 {
-					fmt.Printf("Kind = Multi-Value\n")
+				} else if len(vals) > 1 {
+					fmt.Printf("Kind = Multi-Value\nit = ")
 					size := len(vals)
 					it := make([]interface{}, len(vals))
 					for i, v := range vals {
