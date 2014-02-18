@@ -115,7 +115,7 @@ func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error 
 	}
 
 	// Enter the repl
-	if _, err := fmt.Fprint(f, "\tgack.Repl(root, history)\n}"); err != nil {
+	if _, err := fmt.Fprint(f, "\tgack.Repl(root, history)\n"); err != nil {
 		return err
 	}
 
@@ -125,6 +125,9 @@ func Quine(env *eval.SimpleEnv, imports, history []string, deleteMe bool) error 
 		if _, err := fmt.Fprintf(f, "\tgack.DeleteSelf()\n"); err != nil {
 			return err
 		}
+	}
+	if _, err := fmt.Fprintf(f, "}"); err != nil {
+		return err
 	}
 
 	// Compile the new program
