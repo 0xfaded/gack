@@ -1,4 +1,4 @@
-package gacklib
+package gack
 
 import (
 	"errors"
